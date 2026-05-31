@@ -1,0 +1,22 @@
+.card {
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    overflow: hidden;
+    background: white;
+}
+
+.header {
+    padding: 16px;
+    font-weight: 700;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.content {
+    padding: 16px;
+}
+
+.footer {
+    padding: 16px;
+    border-top: 1px solid #e2e8f0;
+    background: #f8fafc;
+}

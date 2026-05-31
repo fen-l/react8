@@ -1,0 +1,103 @@
+.button {
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    color: white;
+    transition: 0.2s;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    font-weight: 500;
+}
+
+.button:hover {
+    opacity: 0.9;
+}
+
+.button:active {
+    transform: scale(0.98);      /* Эффект нажатия */
+}
+
+.button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* Цветовые варианты */
+.primary {
+    background: #2563eb;
+}
+
+.secondary {
+    background: #6b7280;
+}
+
+.danger {
+    background: #dc2626;
+}
+
+/* Размеры */
+.small {
+    padding: 8px 12px;
+    font-size: 12px;
+}
+
+.medium {
+    padding: 10px 16px;
+    font-size: 14px;
+}
+
+.large {
+    padding: 14px 24px;
+    font-size: 16px;
+}
+
+/* Состояние загрузки */
+.loading {
+    opacity: 0.7;
+    cursor: not-allowed;
+}
+
+.fullWidth {
+    width: 100%;
+    display: flex;
+}
+
+.iconButton {
+    padding: 8px;
+    border-radius: 8px;
+}
+
+.outlined {
+    background: transparent;
+    border: 2px solid currentColor;
+}
+
+.outlined.primary {
+    color: #2563eb;
+    background: transparent;
+}
+
+.outlined.secondary {
+    color: #6b7280;
+    background: transparent;
+}
+
+.outlined.danger {
+    color: #dc2626;
+    background: transparent;
+}
+
+.outlined:hover {
+    background: rgba(0, 0, 0, 0.05);
+}
+
+.text {
+    background: transparent;
+    color: #2563eb;
+}
+
+.text:hover {
+    background: rgba(37, 99, 235, 0.1);
+}

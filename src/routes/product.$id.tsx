@@ -6,7 +6,9 @@ import { ProductSchema, type Product } from '../schemas/product.schema';
 import { LayoutCard } from '../components/ui/LayoutCard';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
+import { Badge } from '../components/ui/Badge';
 import { useAuth } from '../contexts/AuthContext';
+import { useCategories } from '../hooks/useCategories';
 
 interface RouterContext {
   queryClient: QueryClient;
@@ -21,11 +23,18 @@ interface RouterContext {
 
 const fetchProductById = async (id: string): Promise<Product> => {
   const response = await fetch(`https://dummyjson.com/products/${id}`);
+
+  if (!response.ok) {
+    if (response.status === 404) {
+      throw new Error('Товар не найден');
+    }
+    throw new Error(`Ошибка загрузки: ${response.status}`);
+  }
+
   const data = await response.json();
   return ProductSchema.parse(data);
 };
 
-// Просто имитируем сохранение - никаких запросов к API
 const updateProductLocally = async (product: Product): Promise<Product> => {
   await new Promise(resolve => setTimeout(resolve, 500));
   return product;
@@ -34,10 +43,15 @@ const updateProductLocally = async (product: Product): Promise<Product> => {
 export const Route = createFileRoute('/product/$id')({
   loader: async ({ params, context }) => {
     const { queryClient } = context as RouterContext;
-    await queryClient.prefetchQuery({
-      queryKey: ['product', params.id],
-      queryFn: () => fetchProductById(params.id),
-    });
+    try {
+      await queryClient.prefetchQuery({
+        queryKey: ['product', params.id],
+        queryFn: () => fetchProductById(params.id),
+      });
+    } catch (error) {
+      // Ошибка префетча не должна ломать навигацию
+      console.error('Prefetch failed:', error);
+    }
   },
   component: ProductDetailComponent,
 });
@@ -50,6 +64,27 @@ function ProductDetailComponent() {
   const [isEditing, setIsEditing] = React.useState(false);
   const [editedProduct, setEditedProduct] = React.useState<Product | null>(null);
 
+  const { data: categories } = useCategories();
+
+  const catalogSearchParams = React.useMemo(() => {
+    const saved = localStorage.getItem('catalog_search_params');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch {
+        return {};
+      }
+    }
+    return {};
+  }, []);
+
+  const goBackToCatalog = () => {
+    navigate({
+      to: '/catalog',
+      search: catalogSearchParams,
+    });
+  };
+
   React.useEffect(() => {
     if (!authState.isAuthenticated) {
       navigate({ to: '/login' });
@@ -59,14 +94,13 @@ function ProductDetailComponent() {
   const { data: product, isLoading, isError, error } = useQuery({
     queryKey: ['product', id],
     queryFn: () => fetchProductById(id),
+    retry: false, // Не повторяем запрос при ошибке
   });
 
   const updateMutation = useMutation({
     mutationFn: updateProductLocally,
     onSuccess: (updatedProduct) => {
-      // Обновляем кэш детального товара
       queryClient.setQueryData(['product', id], updatedProduct);
-      // Обновляем товар в списке
       queryClient.setQueryData<Product[]>(['products'], (old = []) =>
           old.map(p => p.id === updatedProduct.id ? updatedProduct : p)
       );
@@ -90,7 +124,7 @@ function ProductDetailComponent() {
       updateMutation.mutate(editedProduct);
     }
   };
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     if (editedProduct) {
       setEditedProduct({
         ...editedProduct,
@@ -104,12 +138,24 @@ function ProductDetailComponent() {
   }
 
   if (isError) {
+    // Показываем понятное сообщение об ошибке
+    const errorMessage = error?.message === 'Товар не найден'
+        ? 'Товар с таким ID не существует'
+        : 'Ошибка при загрузке товара';
+
     return (
         <LayoutCard title="Ошибка">
-          <div style={{ color: 'red' }}>Ошибка: {error.message}</div>
-          <Button variant="secondary" onClick={() => navigate({ to: '/catalog' })}>
-            Назад в каталог
-          </Button>
+          <div style={{ textAlign: 'center', padding: '20px' }}>
+            <div style={{ color: '#dc2626', marginBottom: '16px', fontSize: '18px' }}>
+              {errorMessage}
+            </div>
+            <div style={{ marginBottom: '16px', color: '#6b7280' }}>
+              ID товара: {id}
+            </div>
+            <Button variant="primary" onClick={goBackToCatalog}>
+              Вернуться в каталог
+            </Button>
+          </div>
         </LayoutCard>
     );
   }
@@ -117,12 +163,17 @@ function ProductDetailComponent() {
   if (!product) {
     return (
         <LayoutCard title="Товар не найден">
-          <Button variant="secondary" onClick={() => navigate({ to: '/catalog' })}>
-            Назад в каталог
-          </Button>
+          <div style={{ textAlign: 'center', padding: '20px' }}>
+            <div style={{ marginBottom: '16px' }}>Товар с ID {id} не существует.</div>
+            <Button variant="primary" onClick={goBackToCatalog}>
+              Вернуться в каталог
+            </Button>
+          </div>
         </LayoutCard>
     );
   }
+
+  const categoryName = categories?.find(c => c.slug === product.category)?.name || product.category;
 
   return (
       <LayoutCard
@@ -138,7 +189,7 @@ function ProductDetailComponent() {
           }
           footer={
             <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
-              <Button variant="secondary" onClick={() => navigate({ to: '/catalog' })}>
+              <Button variant="secondary" onClick={goBackToCatalog}>
                 Назад в каталог
               </Button>
               {isEditing && (
@@ -171,11 +222,37 @@ function ProductDetailComponent() {
                   onChange={handleChange}
                   isFullWidth
               />
+              <div>
+                <label style={{ display: 'block', marginBottom: '4px', fontSize: '14px', fontWeight: 500 }}>
+                  Категория
+                </label>
+                <select
+                    name="category"
+                    value={editedProduct.category || ''}
+                    onChange={handleChange}
+                    style={{
+                      width: '100%',
+                      padding: '8px 12px',
+                      borderRadius: '8px',
+                      border: '1px solid #d1d5db',
+                      fontSize: '14px',
+                      backgroundColor: 'white',
+                    }}
+                >
+                  <option value="">Выберите категорию</option>
+                  {categories?.map((cat) => (
+                      <option key={cat.slug} value={cat.slug}>
+                        {cat.name}
+                      </option>
+                  ))}
+                </select>
+              </div>
             </div>
         ) : (
             <div style={{ display: 'grid', gap: '12px' }}>
               <div><strong>ID:</strong> {product.id}</div>
               <div><strong>Название:</strong> {product.title}</div>
+              <div><strong>Категория:</strong> <Badge color="green" text={categoryName} /></div>
               <div><strong>Цена:</strong> ${product.price}</div>
             </div>
         )}

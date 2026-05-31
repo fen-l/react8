@@ -7,11 +7,12 @@ import { LayoutCard } from '../components/ui/LayoutCard';
 import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
 import { useAuth } from '../contexts/AuthContext';
+import { useCategories } from '../hooks/useCategories';
 
-// Схема для поисковых параметров
+// Схема для поисковых параметров с валидацией
 const SearchSchema = z.object({
     category: z.string().optional().default(''),
-    page: z.number().min(1).optional().default(1),
+    page: z.coerce.number().min(1).max(100).optional().default(1),
 });
 
 type SearchParams = z.infer<typeof SearchSchema>;
@@ -26,30 +27,32 @@ interface ProductsResponse {
     limit: number;
 }
 
-// Получение списка категорий из отдельного эндпоинта
-const fetchCategories = async (): Promise<string[]> => {
-    const response = await fetch('https://dummyjson.com/products/categories');
-    const data = await response.json();
-    return data.map((cat: { slug: string; name: string; url: string }) => cat.name).sort();
-};
-
 export const Route = createFileRoute('/catalog')({
     validateSearch: (search: Record<string, unknown>): SearchParams => {
-        return SearchSchema.parse({
-            category: search.category || '',
-            page: search.page ? Number(search.page) : 1,
+        // Валидация через Zod
+        const result = SearchSchema.safeParse({
+            category: search.category,
+            page: search.page,
         });
+
+        if (!result.success) {
+            // Если валидация не прошла, возвращаем значения по умолчанию
+            console.error('Validation error:', result.error);
+            return { category: '', page: 1 };
+        }
+
+        return result.data;
     },
     component: CatalogComponent,
 });
 
 // API функция с пагинацией и фильтрацией по категории
-const fetchProducts = async (page: number, category: string): Promise<ProductsResponse> => {
+const fetchProducts = async (page: number, categorySlug: string): Promise<ProductsResponse> => {
     const skip = (page - 1) * ITEMS_PER_PAGE;
 
     let url: string;
-    if (category) {
-        url = `https://dummyjson.com/products/category/${encodeURIComponent(category)}?limit=${ITEMS_PER_PAGE}&skip=${skip}`;
+    if (categorySlug) {
+        url = `https://dummyjson.com/products/category/${encodeURIComponent(categorySlug)}?limit=${ITEMS_PER_PAGE}&skip=${skip}`;
     } else {
         url = `https://dummyjson.com/products?limit=${ITEMS_PER_PAGE}&skip=${skip}`;
     }
@@ -80,8 +83,15 @@ function CatalogComponent() {
     const queryClient = useQueryClient();
     const [currentAgeSeconds, setCurrentAgeSeconds] = React.useState(0);
 
+    // Используем useSearch для доступа к параметрам
     const searchParams = Route.useSearch();
     const { category, page } = searchParams;
+
+    const { data: categories, isLoading: categoriesLoading } = useCategories();
+
+    // Проверяем, существует ли категория
+    const isValidCategory = categories?.some(c => c.slug === category);
+    const activeCategorySlug = isValidCategory ? category : '';
 
     const {
         data: productsData,
@@ -92,16 +102,9 @@ function CatalogComponent() {
         isStale,
         dataUpdatedAt,
     } = useQuery({
-        queryKey: ['products', page, category],
-        queryFn: () => fetchProducts(page, category),
-    });
-
-    const {
-        data: categories,
-        isLoading: isLoadingCategories,
-    } = useQuery({
-        queryKey: ['categories'],
-        queryFn: fetchCategories,
+        queryKey: ['products', page, activeCategorySlug],
+        queryFn: () => fetchProducts(page, activeCategorySlug),
+        enabled: !categoriesLoading, // Ждем загрузки категорий
     });
 
     const products = productsData?.products || [];
@@ -126,6 +129,14 @@ function CatalogComponent() {
     const goToPage = (newPage: number) => {
         updateSearch({ page: newPage });
     };
+
+    // Сохраняем параметры фильтрации в localStorage
+    React.useEffect(() => {
+        localStorage.setItem('catalog_search_params', JSON.stringify({
+            category: activeCategorySlug,
+            page,
+        }));
+    }, [activeCategorySlug, page]);
 
     React.useEffect(() => {
         if (!authState.isAuthenticated) {
@@ -154,10 +165,10 @@ function CatalogComponent() {
     const deleteMutation = useMutation({
         mutationFn: deleteProductAPI,
         onMutate: async (deletedId) => {
-            await queryClient.cancelQueries({ queryKey: ['products', page, category] });
-            const previousData = queryClient.getQueryData<ProductsResponse>(['products', page, category]);
+            await queryClient.cancelQueries({ queryKey: ['products', page, activeCategorySlug] });
+            const previousData = queryClient.getQueryData<ProductsResponse>(['products', page, activeCategorySlug]);
             if (previousData) {
-                queryClient.setQueryData(['products', page, category], {
+                queryClient.setQueryData(['products', page, activeCategorySlug], {
                     ...previousData,
                     products: previousData.products.filter((p) => p.id !== deletedId),
                     total: previousData.total - 1,
@@ -167,13 +178,13 @@ function CatalogComponent() {
         },
         onError: (err, _, context) => {
             if (context?.previousData) {
-                queryClient.setQueryData(['products', page, category], context.previousData);
+                queryClient.setQueryData(['products', page, activeCategorySlug], context.previousData);
             }
             console.error('Delete failed:', err);
         },
     });
 
-    const isLoading = isLoadingProducts || isLoadingCategories;
+    const isLoading = isLoadingProducts || categoriesLoading;
 
     if (isLoading) {
         return <LayoutCard title="Загрузка...">Загрузка товаров...</LayoutCard>;
@@ -188,6 +199,9 @@ function CatalogComponent() {
             </LayoutCard>
         );
     }
+
+    const selectedCategory = categories?.find(c => c.slug === activeCategorySlug);
+    const selectedCategoryName = selectedCategory?.name;
 
     return (
         <div style={{ display: 'grid', gap: '16px' }}>
@@ -228,7 +242,7 @@ function CatalogComponent() {
                             Категория
                         </label>
                         <select
-                            value={category}
+                            value={activeCategorySlug}
                             onChange={handleCategoryChange}
                             style={{
                                 width: '100%',
@@ -241,8 +255,8 @@ function CatalogComponent() {
                         >
                             <option value="">Все категории</option>
                             {categories?.map((cat) => (
-                                <option key={cat} value={cat}>
-                                    {cat}
+                                <option key={cat.slug} value={cat.slug}>
+                                    {cat.name}
                                 </option>
                             ))}
                         </select>
@@ -261,7 +275,7 @@ function CatalogComponent() {
                 <Button
                     variant="secondary"
                     size="small"
-                    onClick={() => queryClient.invalidateQueries({ queryKey: ['products', page, category] })}
+                    onClick={() => queryClient.invalidateQueries({ queryKey: ['products', page, activeCategorySlug] })}
                 >
                     Принудительно обновить
                 </Button>
@@ -270,48 +284,53 @@ function CatalogComponent() {
             {/* Результаты фильтрации */}
             <div style={{ fontSize: '14px', color: '#6b7280' }}>
                 Найдено товаров: {totalProducts}
-                {category && ` в категории "${category}"`}
+                {selectedCategoryName && ` в категории "${selectedCategoryName}"`}
+                {activeCategorySlug && !selectedCategoryName && ` по slug "${activeCategorySlug}" (категория не найдена)`}
                 <span style={{ marginLeft: '8px' }}>
                     (Страница {page} из {totalPages})
                 </span>
             </div>
 
             {/* Список товаров */}
-            {products.map((product) => (
-                <LayoutCard
-                    key={product.id}
-                    title={
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <span>Товар: {product.title}</span>
-                            <div style={{ display: 'flex', gap: '8px' }}>
-                                <Badge color="green" text={product.category} />
-                                <Badge color="blue" text={`ID: ${product.id}`} />
+            {products.map((product) => {
+                const productCategory = categories?.find(c => c.slug === product.category);
+                const productCategoryName = productCategory?.name || product.category;
+                return (
+                    <LayoutCard
+                        key={product.id}
+                        title={
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <span>Товар: {product.title}</span>
+                                <div style={{ display: 'flex', gap: '8px' }}>
+                                    <Badge color="green" text={productCategoryName} />
+                                    <Badge color="blue" text={`ID: ${product.id}`} />
+                                </div>
                             </div>
+                        }
+                    >
+                        <div style={{ marginBottom: 12 }}>
+                            <strong>Цена:</strong> ${product.price}
                         </div>
-                    }
-                >
-                    <div style={{ marginBottom: 12 }}>
-                        <strong>Цена:</strong> ${product.price}
-                    </div>
-                    <div style={{ display: 'flex', gap: 8 }}>
-                        <Button
-                            variant="secondary"
-                            size="small"
-                            onClick={() => navigate({ to: `/product/${product.id}` })}
-                        >
-                            Подробнее
-                        </Button>
-                        <Button
-                            variant="danger"
-                            size="small"
-                            onClick={() => deleteMutation.mutate(product.id)}
-                            isLoading={deleteMutation.isPending}
-                        >
-                            Удалить
-                        </Button>
-                    </div>
-                </LayoutCard>
-            ))}
+                        <div style={{ display: 'flex', gap: 8 }}>
+                            <Button
+                                variant="secondary"
+                                size="small"
+                                onClick={() => navigate({ to: `/product/${product.id}` })}
+                            >
+                                Подробнее
+                            </Button>
+                            <Button
+                                variant="danger"
+                                size="small"
+                                onClick={() => deleteMutation.mutate(product.id)}
+                                isLoading={deleteMutation.isPending}
+                            >
+                                Удалить
+                            </Button>
+                        </div>
+                    </LayoutCard>
+                );
+            })}
 
             {/* Пагинация */}
             {totalPages > 1 && (
@@ -328,39 +347,32 @@ function CatalogComponent() {
                         onClick={() => goToPage(page - 1)}
                         disabled={page === 1}
                     >
-                        ← Назад
+                        &lt;
                     </Button>
 
-                    <div style={{
-                        display: 'flex',
-                        gap: '4px',
-                        alignItems: 'center',
-                        flexWrap: 'wrap'
-                    }}>
-                        {Array.from({ length: Math.min(7, totalPages) }, (_, i) => {
-                            let pageNum;
-                            if (totalPages <= 7) {
-                                pageNum = i + 1;
-                            } else if (page <= 4) {
-                                pageNum = i + 1;
-                            } else if (page >= totalPages - 3) {
-                                pageNum = totalPages - 6 + i;
-                            } else {
-                                pageNum = page - 3 + i;
-                            }
+                    {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                        let pageNum;
+                        if (totalPages <= 5) {
+                            pageNum = i + 1;
+                        } else if (page <= 3) {
+                            pageNum = i + 1;
+                        } else if (page >= totalPages - 2) {
+                            pageNum = totalPages - 4 + i;
+                        } else {
+                            pageNum = page - 2 + i;
+                        }
 
-                            return (
-                                <Button
-                                    key={pageNum}
-                                    variant={pageNum === page ? 'primary' : 'secondary'}
-                                    size="small"
-                                    onClick={() => goToPage(pageNum)}
-                                >
-                                    {pageNum}
-                                </Button>
-                            );
-                        })}
-                    </div>
+                        return (
+                            <Button
+                                key={pageNum}
+                                variant={pageNum === page ? 'primary' : 'secondary'}
+                                size="small"
+                                onClick={() => goToPage(pageNum)}
+                            >
+                                {pageNum}
+                            </Button>
+                        );
+                    })}
 
                     <Button
                         variant="secondary"
@@ -368,7 +380,7 @@ function CatalogComponent() {
                         onClick={() => goToPage(page + 1)}
                         disabled={page === totalPages}
                     >
-                        Вперед →
+                        &gt;
                     </Button>
                 </div>
             )}

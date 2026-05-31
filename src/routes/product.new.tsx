@@ -1,11 +1,12 @@
 import * as React from 'react';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { ProductSchema, type Product } from '../schemas/product.schema';
+import { type Product } from '../schemas/product.schema';
 import { LayoutCard } from '../components/ui/LayoutCard';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { useAuth } from '../contexts/AuthContext';
+import { useCategories } from '../hooks/useCategories';
 
 export const Route = createFileRoute('/product/new')({
   component: CreateProductComponent,
@@ -18,42 +19,68 @@ const createProductAPI = async (product: Omit<Product, 'id'>): Promise<Product> 
     headers: {
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify(product),
+    body: JSON.stringify({
+      title: product.title,
+      price: product.price,
+      category: product.category,
+    }),
   });
   const data = await response.json();
-  // DummyJSON возвращает продукт с новым id
-  return ProductSchema.parse({
+
+  // DummyJSON возвращает id, title, price, category
+  // Но эти данные не сохраняются на сервере реально
+  return {
     id: data.id,
     title: data.title,
     price: data.price,
-  });
+    category: data.category,
+  };
 };
 
-export default function CreateProductComponent() {
+function CreateProductComponent() {
   const navigate = useNavigate();
   const { state: authState } = useAuth();
   const queryClient = useQueryClient();
+  const { data: categories, isLoading: categoriesLoading } = useCategories();
   const [form, setForm] = React.useState({
     title: '',
     price: 0,
+    category: '',
   });
   const [errors, setErrors] = React.useState<Record<string, string>>({});
 
-  // Проверка авторизации
+  const catalogSearchParams = React.useMemo(() => {
+    const saved = localStorage.getItem('catalog_search_params');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch {
+        return {};
+      }
+    }
+    return {};
+  }, []);
+
+  const goBackToCatalog = () => {
+    navigate({
+      to: '/catalog',
+      search: catalogSearchParams,
+    });
+  };
+
   React.useEffect(() => {
     if (!authState.isAuthenticated) {
       navigate({ to: '/login' });
     }
   }, [authState.isAuthenticated, navigate]);
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     setForm({
       ...form,
       [e.target.name]: e.target.name === 'price'
           ? Number(e.target.value)
           : e.target.value,
     });
-    // Очищаем ошибку при изменении поля
     if (errors[e.target.name]) {
       setErrors({ ...errors, [e.target.name]: '' });
     }
@@ -67,6 +94,9 @@ export default function CreateProductComponent() {
     if (form.price <= 0) {
       newErrors.price = 'Цена должна быть больше 0';
     }
+    if (!form.category.trim()) {
+      newErrors.category = 'Выберите категорию';
+    }
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -78,8 +108,11 @@ export default function CreateProductComponent() {
       queryClient.setQueryData<Product[]>(['products'], (old = []) => {
         return [newProduct, ...old];
       });
-      // Переходим на страницу нового продукта
-      navigate({ to: `/product/${newProduct.id}` });
+      // Возвращаемся в каталог, а не на страницу нового товара
+      goBackToCatalog();
+    },
+    onError: (error) => {
+      console.error('Create failed:', error);
     },
   });
 
@@ -89,12 +122,16 @@ export default function CreateProductComponent() {
     }
   };
 
+  if (categoriesLoading) {
+    return <LayoutCard title="Загрузка...">Загрузка категорий...</LayoutCard>;
+  }
+
   return (
       <LayoutCard
           title="Создание нового товара"
           footer={
             <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
-              <Button variant="secondary" onClick={() => navigate({ to: '/catalog' })}>
+              <Button variant="secondary" onClick={goBackToCatalog}>
                 Отмена
               </Button>
               <Button
@@ -125,6 +162,36 @@ export default function CreateProductComponent() {
               error={errors.price}
               isFullWidth
           />
+          <div>
+            <label style={{ display: 'block', marginBottom: '4px', fontSize: '14px', fontWeight: 500 }}>
+              Категория
+            </label>
+            <select
+                name="category"
+                value={form.category}
+                onChange={handleChange}
+                style={{
+                  width: '100%',
+                  padding: '8px 12px',
+                  borderRadius: '8px',
+                  border: `1px solid ${errors.category ? '#dc2626' : '#d1d5db'}`,
+                  fontSize: '14px',
+                  backgroundColor: 'white',
+                }}
+            >
+              <option value="">Выберите категорию</option>
+              {categories?.map((cat) => (
+                  <option key={cat.slug} value={cat.slug}>
+                    {cat.name}
+                  </option>
+              ))}
+            </select>
+            {errors.category && (
+                <div style={{ color: '#dc2626', fontSize: '12px', marginTop: '4px' }}>
+                  {errors.category}
+                </div>
+            )}
+          </div>
         </div>
       </LayoutCard>
   );

@@ -15,28 +15,50 @@ function LoginComponent() {
     const [username, setUsername] = React.useState('');
     const [password, setPassword] = React.useState('');
 
+    // Получаем сохраненные параметры каталога
+    const catalogSearchParams = React.useMemo(() => {
+        const saved = localStorage.getItem('catalog_search_params');
+        if (saved) {
+            try {
+                return JSON.parse(saved);
+            } catch {
+                return {};
+            }
+        }
+        return {};
+    }, []);
+
     React.useEffect(() => {
         if (state.isAuthenticated) {
-            navigate({ to: '/catalog' });
+            navigate({
+                to: '/catalog',
+                search: catalogSearchParams,
+            });
         }
-    }, [state.isAuthenticated, navigate]);
+    }, [state.isAuthenticated, navigate, catalogSearchParams]);
 
     const handleLogin = () => {
-        if (username && password) {
-            const user = { username };
+        if (username.trim() && password.trim()) {
+            const user = { username: username.trim() };
             localStorage.setItem('user', JSON.stringify(user));
             dispatch({ type: 'LOGIN', payload: user });
-            navigate({ to: '/catalog' });
+        }
+    };
+
+    const handleKeyDown = (e: React.KeyboardEvent) => {
+        if (e.key === 'Enter') {
+            handleLogin();
         }
     };
 
     return (
-        <LayoutCard title="🔐 Авторизация">
+        <LayoutCard title="Авторизация">
             <div style={{ display: 'grid', gap: '16px' }}>
                 <Input
                     label="Имя пользователя"
                     value={username}
                     onChange={(e) => setUsername(e.target.value)}
+                    onKeyDown={handleKeyDown}
                     isFullWidth
                 />
                 <Input
@@ -44,6 +66,7 @@ function LoginComponent() {
                     type="password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
+                    onKeyDown={handleKeyDown}
                     isFullWidth
                 />
                 <Button variant="primary" onClick={handleLogin} isFullWidth>

@@ -1,44 +1,76 @@
 import * as React from 'react';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
+import { z } from 'zod';
 import { ProductSchema, type Product } from '../schemas/product.schema';
 import { LayoutCard } from '../components/ui/LayoutCard';
 import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
 import { useAuth } from '../contexts/AuthContext';
-import { z } from 'zod';
 
 // Схема для поисковых параметров
 const SearchSchema = z.object({
-    search: z.string().optional().default(''),
-    minPrice: z.number().optional(),
-    maxPrice: z.number().optional(),
+    category: z.string().optional().default(''),
+    page: z.number().min(1).optional().default(1),
 });
 
 type SearchParams = z.infer<typeof SearchSchema>;
 
+const ITEMS_PER_PAGE = 10;
+
+// Тип для ответа API
+interface ProductsResponse {
+    products: Product[];
+    total: number;
+    skip: number;
+    limit: number;
+}
+
+// Получение списка категорий из отдельного эндпоинта
+const fetchCategories = async (): Promise<string[]> => {
+    const response = await fetch('https://dummyjson.com/products/categories');
+    const data = await response.json();
+    return data.map((cat: { slug: string; name: string; url: string }) => cat.name).sort();
+};
+
 export const Route = createFileRoute('/catalog')({
-    // Валидация search params через Zod
     validateSearch: (search: Record<string, unknown>): SearchParams => {
         return SearchSchema.parse({
-            search: search.search || '',
-            minPrice: search.minPrice ? Number(search.minPrice) : undefined,
-            maxPrice: search.maxPrice ? Number(search.maxPrice) : undefined,
+            category: search.category || '',
+            page: search.page ? Number(search.page) : 1,
         });
     },
     component: CatalogComponent,
 });
 
-// API функции с валидацией
-const fetchProducts = async (): Promise<Product[]> => {
-    const response = await fetch('https://dummyjson.com/products');
+// API функция с пагинацией и фильтрацией по категории
+const fetchProducts = async (page: number, category: string): Promise<ProductsResponse> => {
+    const skip = (page - 1) * ITEMS_PER_PAGE;
+
+    let url: string;
+    if (category) {
+        url = `https://dummyjson.com/products/category/${encodeURIComponent(category)}?limit=${ITEMS_PER_PAGE}&skip=${skip}`;
+    } else {
+        url = `https://dummyjson.com/products?limit=${ITEMS_PER_PAGE}&skip=${skip}`;
+    }
+
+    const response = await fetch(url);
     const data = await response.json();
-    // Валидация каждого продукта через Zod
-    return data.products.map((product: unknown) => ProductSchema.parse(product));
+
+    return {
+        products: data.products.map((product: any) => ProductSchema.parse({
+            id: product.id,
+            title: product.title,
+            price: product.price,
+            category: product.category,
+        })),
+        total: data.total,
+        skip: data.skip,
+        limit: data.limit,
+    };
 };
 
 const deleteProductAPI = async (_: number): Promise<void> => {
-    // Имитация удаления (DummyJSON не поддерживает реальное удаление)
     await new Promise(resolve => setTimeout(resolve, 500));
 };
 
@@ -48,18 +80,52 @@ function CatalogComponent() {
     const queryClient = useQueryClient();
     const [currentAgeSeconds, setCurrentAgeSeconds] = React.useState(0);
 
+    const searchParams = Route.useSearch();
+    const { category, page } = searchParams;
+
     const {
-        data: products,
-        isLoading,
-        isError,
-        error,
+        data: productsData,
+        isLoading: isLoadingProducts,
+        isError: isErrorProducts,
+        error: productsError,
         isFetching,
         isStale,
         dataUpdatedAt,
     } = useQuery({
-        queryKey: ['products'],
-        queryFn: fetchProducts,
+        queryKey: ['products', page, category],
+        queryFn: () => fetchProducts(page, category),
     });
+
+    const {
+        data: categories,
+        isLoading: isLoadingCategories,
+    } = useQuery({
+        queryKey: ['categories'],
+        queryFn: fetchCategories,
+    });
+
+    const products = productsData?.products || [];
+    const totalProducts = productsData?.total || 0;
+    const totalPages = Math.ceil(totalProducts / ITEMS_PER_PAGE);
+
+    const updateSearch = (updates: Partial<SearchParams>) => {
+        navigate({
+            to: '/catalog',
+            search: { ...searchParams, ...updates },
+        });
+    };
+
+    const handleCategoryChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+        updateSearch({ category: e.target.value, page: 1 });
+    };
+
+    const clearFilters = () => {
+        updateSearch({ category: '', page: 1 });
+    };
+
+    const goToPage = (newPage: number) => {
+        updateSearch({ page: newPage });
+    };
 
     React.useEffect(() => {
         if (!authState.isAuthenticated) {
@@ -88,30 +154,36 @@ function CatalogComponent() {
     const deleteMutation = useMutation({
         mutationFn: deleteProductAPI,
         onMutate: async (deletedId) => {
-            await queryClient.cancelQueries({ queryKey: ['products'] });
-            const previousProducts = queryClient.getQueryData<Product[]>(['products']);
-            queryClient.setQueryData<Product[]>(['products'], (old) =>
-                old?.filter((p) => p.id !== deletedId) ?? []
-            );
-            return { previousProducts };
+            await queryClient.cancelQueries({ queryKey: ['products', page, category] });
+            const previousData = queryClient.getQueryData<ProductsResponse>(['products', page, category]);
+            if (previousData) {
+                queryClient.setQueryData(['products', page, category], {
+                    ...previousData,
+                    products: previousData.products.filter((p) => p.id !== deletedId),
+                    total: previousData.total - 1,
+                });
+            }
+            return { previousData };
         },
         onError: (err, _, context) => {
-            if (context?.previousProducts) {
-                queryClient.setQueryData(['products'], context.previousProducts);
+            if (context?.previousData) {
+                queryClient.setQueryData(['products', page, category], context.previousData);
             }
             console.error('Delete failed:', err);
         },
     });
 
+    const isLoading = isLoadingProducts || isLoadingCategories;
+
     if (isLoading) {
         return <LayoutCard title="Загрузка...">Загрузка товаров...</LayoutCard>;
     }
 
-    if (isError) {
+    if (isErrorProducts) {
         return (
             <LayoutCard title="Ошибка">
                 <div style={{ color: 'red' }}>
-                    {error?.message || 'Ошибка загрузки данных'}
+                    {productsError?.message || 'Ошибка загрузки данных'}
                 </div>
             </LayoutCard>
         );
@@ -119,6 +191,7 @@ function CatalogComponent() {
 
     return (
         <div style={{ display: 'grid', gap: '16px' }}>
+            {/* Индикатор статуса кэша */}
             <div style={{
                 padding: '12px',
                 backgroundColor: isDataStale ? '#fee2e2' : '#dcfce7',
@@ -147,24 +220,40 @@ function CatalogComponent() {
                 </div>
             </div>
 
-            <div style={{ marginBottom: '8px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', marginBottom: '4px', color: '#6b7280' }}>
-                    <span>Fresh</span>
-                    <span>Stale</span>
+            {/* Фильтр по категории */}
+            <LayoutCard title="Фильтр по категории">
+                <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-end' }}>
+                    <div style={{ flex: 1 }}>
+                        <label style={{ display: 'block', marginBottom: '4px', fontSize: '14px', fontWeight: 500 }}>
+                            Категория
+                        </label>
+                        <select
+                            value={category}
+                            onChange={handleCategoryChange}
+                            style={{
+                                width: '100%',
+                                padding: '8px 12px',
+                                borderRadius: '8px',
+                                border: '1px solid #d1d5db',
+                                fontSize: '14px',
+                                backgroundColor: 'white',
+                            }}
+                        >
+                            <option value="">Все категории</option>
+                            {categories?.map((cat) => (
+                                <option key={cat} value={cat}>
+                                    {cat}
+                                </option>
+                            ))}
+                        </select>
+                    </div>
+                    <Button variant="secondary" onClick={clearFilters}>
+                        Очистить
+                    </Button>
                 </div>
-                <div style={{ height: '8px', backgroundColor: '#e5e7eb', borderRadius: '4px', overflow: 'hidden' }}>
-                    <div style={{
-                        width: `${(currentAgeSeconds / 60) * 100}%`,
-                        height: '100%',
-                        backgroundColor: isDataStale ? '#dc2626' : '#10b981',
-                        transition: 'width 1s linear'
-                    }} />
-                </div>
-                <div style={{ fontSize: '12px', marginTop: '4px', color: '#6b7280', textAlign: 'center' }}>
-                    staleTime: 60 секунд
-                </div>
-            </div>
+            </LayoutCard>
 
+            {/* Кнопки управления */}
             <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
                 <Button variant="primary" onClick={() => navigate({ to: '/product/new' })}>
                     Добавить товар
@@ -172,19 +261,32 @@ function CatalogComponent() {
                 <Button
                     variant="secondary"
                     size="small"
-                    onClick={() => queryClient.invalidateQueries({ queryKey: ['products'] })}
+                    onClick={() => queryClient.invalidateQueries({ queryKey: ['products', page, category] })}
                 >
                     Принудительно обновить
                 </Button>
             </div>
 
-            {products?.map((product) => (
+            {/* Результаты фильтрации */}
+            <div style={{ fontSize: '14px', color: '#6b7280' }}>
+                Найдено товаров: {totalProducts}
+                {category && ` в категории "${category}"`}
+                <span style={{ marginLeft: '8px' }}>
+                    (Страница {page} из {totalPages})
+                </span>
+            </div>
+
+            {/* Список товаров */}
+            {products.map((product) => (
                 <LayoutCard
                     key={product.id}
                     title={
-                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                             <span>Товар: {product.title}</span>
-                            <Badge color="blue" text={`ID: ${product.id}`} />
+                            <div style={{ display: 'flex', gap: '8px' }}>
+                                <Badge color="green" text={product.category} />
+                                <Badge color="blue" text={`ID: ${product.id}`} />
+                            </div>
                         </div>
                     }
                 >
@@ -210,6 +312,72 @@ function CatalogComponent() {
                     </div>
                 </LayoutCard>
             ))}
+
+            {/* Пагинация */}
+            {totalPages > 1 && (
+                <div style={{
+                    display: 'flex',
+                    justifyContent: 'center',
+                    gap: '8px',
+                    marginTop: '16px',
+                    flexWrap: 'wrap'
+                }}>
+                    <Button
+                        variant="secondary"
+                        size="small"
+                        onClick={() => goToPage(page - 1)}
+                        disabled={page === 1}
+                    >
+                        ← Назад
+                    </Button>
+
+                    <div style={{
+                        display: 'flex',
+                        gap: '4px',
+                        alignItems: 'center',
+                        flexWrap: 'wrap'
+                    }}>
+                        {Array.from({ length: Math.min(7, totalPages) }, (_, i) => {
+                            let pageNum;
+                            if (totalPages <= 7) {
+                                pageNum = i + 1;
+                            } else if (page <= 4) {
+                                pageNum = i + 1;
+                            } else if (page >= totalPages - 3) {
+                                pageNum = totalPages - 6 + i;
+                            } else {
+                                pageNum = page - 3 + i;
+                            }
+
+                            return (
+                                <Button
+                                    key={pageNum}
+                                    variant={pageNum === page ? 'primary' : 'secondary'}
+                                    size="small"
+                                    onClick={() => goToPage(pageNum)}
+                                >
+                                    {pageNum}
+                                </Button>
+                            );
+                        })}
+                    </div>
+
+                    <Button
+                        variant="secondary"
+                        size="small"
+                        onClick={() => goToPage(page + 1)}
+                        disabled={page === totalPages}
+                    >
+                        Вперед →
+                    </Button>
+                </div>
+            )}
+
+            {products.length === 0 && (
+                <LayoutCard title="Ничего не найдено">
+                    <div>Попробуйте выбрать другую категорию</div>
+                </LayoutCard>
+            )}
         </div>
     );
 }

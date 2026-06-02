@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from '@tanstack/react-router';
-import { LayoutCard } from '../components/ui/LayoutCard';
-import { Button } from '../components/ui/Button';
+import { LayoutCard } from '@/components/ui/LayoutCard';
+import { Button } from '@/components/ui/Button';
 
 export const Route = createFileRoute('/')({
     component: IndexComponent,
@@ -13,7 +13,7 @@ function IndexComponent() {
                 <p style={{ fontSize: '18px', marginBottom: '20px' }}>
                     Здесь вы найдете лучшие товары по отличным ценам!
                 </p>
-                <Link to="/login">
+                <Link to="/registration">
                     <Button variant="primary">
                         Начать покупки
                     </Button>

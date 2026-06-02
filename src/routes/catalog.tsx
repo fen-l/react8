@@ -1,13 +1,13 @@
 import * as React from 'react';
-import { createFileRoute, useNavigate } from '@tanstack/react-router';
+import { createFileRoute, useNavigate, redirect } from '@tanstack/react-router';
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import { z } from 'zod';
 import { ProductSchema, type Product } from '../schemas/product.schema';
-import { LayoutCard } from '../components/ui/LayoutCard';
-import { Button } from '../components/ui/Button';
-import { Badge } from '../components/ui/Badge';
-import { useAuth } from '../contexts/AuthContext';
-import { useCategories } from '../hooks/useCategories';
+import { LayoutCard } from '@/components/ui/LayoutCard';
+import { Button } from '@/components/ui/Button';
+import { Badge } from '@/components/ui/Badge';
+import { useAuth } from '@/contexts/AuthContext';
+import { useCategories } from '@/hooks/useCategories';
 
 // Схема для поисковых параметров с валидацией
 const SearchSchema = z.object({
@@ -42,6 +42,13 @@ export const Route = createFileRoute('/catalog')({
         }
 
         return result.data;
+    },
+    beforeLoad: ({ context }) => {
+        if (!context.auth?.state?.isAuthenticated) {
+            throw redirect({
+                to: '/registration',
+            });
+        }
     },
     component: CatalogComponent,
 });
@@ -140,7 +147,7 @@ function CatalogComponent() {
 
     React.useEffect(() => {
         if (!authState.isAuthenticated) {
-            navigate({ to: '/login' });
+            navigate({ to: '/registration' });
         }
     }, [authState.isAuthenticated, navigate]);
 

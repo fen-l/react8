@@ -1,10 +1,11 @@
 import * as React from 'react';
-import { Outlet, createRootRoute, Link, useNavigate } from '@tanstack/react-router';
-import { TanStackRouterDevtools } from '@tanstack/react-router-devtools';
-import { useAuth } from '../contexts/AuthContext';
-import { Button } from '../components/ui/Button';
+import { Outlet, createRootRouteWithContext, Link, useNavigate } from '@tanstack/react-router';
+import { TanStackRouterDevtools } from '@tanstack/react-router-devtools'; // Исправлен импорт
+import { useAuth } from '@/contexts/AuthContext';
+import { Button } from '@/components/ui/Button';
+import { type RouterContext } from '@/router-context'
 
-export const Route = createRootRoute({
+export const Route = createRootRouteWithContext<RouterContext>()({
     component: RootComponent,
 });
 
@@ -75,7 +76,7 @@ function RootComponent() {
                         </>
                     ) : (
                         <Link
-                            to="/login"
+                            to="/registration"
                             activeProps={{ style: { fontWeight: 'bold', color: '#007bff' } }}
                             style={{ textDecoration: 'none', color: '#333' }}
                         >

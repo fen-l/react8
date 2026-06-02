@@ -9,15 +9,15 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as LoginRouteImport } from './routes/login'
+import { Route as RegistrationRouteImport } from './routes/registration'
 import { Route as CatalogRouteImport } from './routes/catalog'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ProductNewRouteImport } from './routes/product.new'
 import { Route as ProductIdRouteImport } from './routes/product.$id'
 
-const LoginRoute = LoginRouteImport.update({
-  id: '/login',
-  path: '/login',
+const RegistrationRoute = RegistrationRouteImport.update({
+  id: '/registration',
+  path: '/registration',
   getParentRoute: () => rootRouteImport,
 } as any)
 const CatalogRoute = CatalogRouteImport.update({
@@ -44,14 +44,14 @@ const ProductIdRoute = ProductIdRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/catalog': typeof CatalogRoute
-  '/login': typeof LoginRoute
+  '/registration': typeof RegistrationRoute
   '/product/$id': typeof ProductIdRoute
   '/product/new': typeof ProductNewRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/catalog': typeof CatalogRoute
-  '/login': typeof LoginRoute
+  '/registration': typeof RegistrationRoute
   '/product/$id': typeof ProductIdRoute
   '/product/new': typeof ProductNewRoute
 }
@@ -59,33 +59,44 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/catalog': typeof CatalogRoute
-  '/login': typeof LoginRoute
+  '/registration': typeof RegistrationRoute
   '/product/$id': typeof ProductIdRoute
   '/product/new': typeof ProductNewRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/catalog' | '/login' | '/product/$id' | '/product/new'
+  fullPaths:
+    | '/'
+    | '/catalog'
+    | '/registration'
+    | '/product/$id'
+    | '/product/new'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/catalog' | '/login' | '/product/$id' | '/product/new'
-  id: '__root__' | '/' | '/catalog' | '/login' | '/product/$id' | '/product/new'
+  to: '/' | '/catalog' | '/registration' | '/product/$id' | '/product/new'
+  id:
+    | '__root__'
+    | '/'
+    | '/catalog'
+    | '/registration'
+    | '/product/$id'
+    | '/product/new'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   CatalogRoute: typeof CatalogRoute
-  LoginRoute: typeof LoginRoute
+  RegistrationRoute: typeof RegistrationRoute
   ProductIdRoute: typeof ProductIdRoute
   ProductNewRoute: typeof ProductNewRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/login': {
-      id: '/login'
-      path: '/login'
-      fullPath: '/login'
-      preLoaderRoute: typeof LoginRouteImport
+    '/registration': {
+      id: '/registration'
+      path: '/registration'
+      fullPath: '/registration'
+      preLoaderRoute: typeof RegistrationRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/catalog': {
@@ -122,7 +133,7 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   CatalogRoute: CatalogRoute,
-  LoginRoute: LoginRoute,
+  RegistrationRoute: RegistrationRoute,
   ProductIdRoute: ProductIdRoute,
   ProductNewRoute: ProductNewRoute,
 }

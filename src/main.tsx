@@ -1,56 +1,37 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
-import { RouterProvider, createRouter } from '@tanstack/react-router';
+import { RouterProvider } from '@tanstack/react-router';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-
-// Импортируем сгенерированное дерево маршрутов
-import { routeTree } from './routeTree.gen';
-
-// Импортируем провайдеры
+import { router } from './router';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
-import type { AuthContextType } from './contexts/AuthContext';
 
 const queryClient = new QueryClient({
     defaultOptions: {
         queries: {
-            staleTime: 60 * 1000,  // 60 секунд - данные считаются свежими
-            gcTime: 5 * 60 * 1000, // 5 минут - хранение в кэше после размонтирования
-            retry: 1,              // количество попыток при ошибке
-            refetchOnWindowFocus: false, // не делать запрос при фокусе окна (для удобства демо)
+            staleTime: 60 * 1000,
+            gcTime: 5 * 60 * 1000,
+            retry: 1,
+            refetchOnWindowFocus: false,
         },
     },
 });
 
-
-// Создаем роутер
-const router = createRouter({
-    routeTree,
-    context: {
-        queryClient,
-        auth: undefined! as AuthContextType,
-    },
-});
-
-function RouterWithAuth() {
+function AppRouter() {
     const auth = useAuth();
 
-    React.useEffect(() => {
-        router.update({
-            context: {
-                queryClient,
-                auth,
-            },
-        });
-    }, [auth]);
-
-    return <RouterProvider router={router} />;
+    return (
+        <RouterProvider
+            router={router}
+            context={{ auth, queryClient }}
+        />
+    );
 }
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
     <React.StrictMode>
         <QueryClientProvider client={queryClient}>
             <AuthProvider>
-                <RouterWithAuth />
+                <AppRouter />
             </AuthProvider>
         </QueryClientProvider>
     </React.StrictMode>

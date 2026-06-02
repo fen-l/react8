@@ -1,12 +1,12 @@
 import * as React from 'react';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { type Product } from '../schemas/product.schema';
-import { LayoutCard } from '../components/ui/LayoutCard';
-import { Button } from '../components/ui/Button';
-import { Input } from '../components/ui/Input';
-import { useAuth } from '../contexts/AuthContext';
-import { useCategories } from '../hooks/useCategories';
+import { type Product } from '@/schemas/product.schema';
+import { LayoutCard } from '@/components/ui/LayoutCard';
+import { Button } from '@/components/ui/Button';
+import { Input } from '@/components/ui/Input';
+import { useAuth } from '@/contexts/AuthContext';
+import { useCategories } from '@/hooks/useCategories';
 
 export const Route = createFileRoute('/product/new')({
   component: CreateProductComponent,
@@ -70,7 +70,7 @@ function CreateProductComponent() {
 
   React.useEffect(() => {
     if (!authState.isAuthenticated) {
-      navigate({ to: '/login' });
+      navigate({ to: '/registration' });
     }
   }, [authState.isAuthenticated, navigate]);
 

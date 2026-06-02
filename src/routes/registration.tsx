@@ -2,18 +2,18 @@ import * as React from 'react';
 import { z } from 'zod';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 
-import { useAuth } from '../contexts/AuthContext';
-import { LayoutCard } from '../components/ui/LayoutCard';
-import { Button } from '../components/ui/Button';
-import { Input } from '../components/ui/Input';
+import { useAuth } from '@/contexts/AuthContext';
+import { LayoutCard } from '@/components/ui/LayoutCard';
+import { Button } from '@/components/ui/Button';
+import { Input } from '@/components/ui/Input';
 
-export const Route = createFileRoute('/login')({
-    component: LoginComponent,
+export const Route = createFileRoute('/registration')({
+    component: RegistrationComponent,
 });
 
 /* 1. ZOD SCHEMA */
 
-const LoginSchema = z.object({
+const RegistrationSchema = z.object({
     email: z.string().email('Некорректный email'),
     password: z.string().min(8, 'Пароль должен содержать минимум 8 символов'),
     username: z.string().min(1, 'Имя обязательно'),
@@ -24,7 +24,7 @@ const LoginSchema = z.object({
     }),
 });
 
-type FormData = z.infer<typeof LoginSchema>;
+type FormData = z.infer<typeof RegistrationSchema>;
 
 /* 2. STATE */
 
@@ -76,7 +76,7 @@ const initialState: IFormState = {
 
 /* 4. REDUCER */
 
-function loginReducer(
+function registrationReducer(
     state: IFormState,
     action: TFormAction
 ): IFormState {
@@ -144,12 +144,12 @@ const formatZodErrors = (issues: z.ZodIssue[]) => {
 
 /* 6. COMPONENT */
 
-function LoginComponent() {
+function RegistrationComponent() {
     const { dispatch, state: authState } = useAuth();
     const navigate = useNavigate();
 
     const [state, formDispatch] = React.useReducer(
-        loginReducer,
+        registrationReducer,
         initialState
     );
 
@@ -187,21 +187,21 @@ function LoginComponent() {
 
         switch (step) {
             case 1:
-                schema = LoginSchema.pick({
+                schema = RegistrationSchema.pick({
                     email: true,
                     password: true,
                 });
                 break;
 
             case 2:
-                schema = LoginSchema.pick({
+                schema = RegistrationSchema.pick({
                     username: true,
                     city: true,
                 });
                 break;
 
             case 3:
-                schema = LoginSchema.pick({
+                schema = RegistrationSchema.pick({
                     occupation: true,
                     agree: true,
                 });

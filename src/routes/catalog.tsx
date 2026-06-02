@@ -189,6 +189,11 @@ function CatalogComponent() {
             }
             console.error('Delete failed:', err);
         },
+        onSuccess: () => {
+            queryClient.invalidateQueries({
+                queryKey: ['products'],
+            });
+        },
     });
 
     const isLoading = isLoadingProducts || categoriesLoading;

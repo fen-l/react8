@@ -90,11 +90,11 @@ const fetchProducts = async (page: number, categorySlug: string): Promise<Produc
         return updated ?? p;
     });
 
-    const filteredCreated = categorySlug
-        ? changes.created.filter(
-            (p) => p.category === categorySlug,
-        )
-        : changes.created;
+    const filteredCreated = page === 1
+        ? (categorySlug
+            ? changes.created.filter(p => p.category === categorySlug)
+            : changes.created)
+        : [];
 
     const products = [
         ...filteredCreated,

@@ -2,7 +2,7 @@ import * as React from 'react';
 import { createFileRoute, useNavigate, redirect } from '@tanstack/react-router';
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import { z } from 'zod';
-import { ProductSchema, type Product } from '../schemas/product.schema';
+import { ProductSchema, type Product } from '@/schemas/product.schema';
 import { LayoutCard } from '@/components/ui/LayoutCard';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';

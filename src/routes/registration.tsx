@@ -2,10 +2,10 @@ import * as React from 'react';
 import { z } from 'zod';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 
-import { useAuth } from '../contexts/AuthContext';
-import { LayoutCard } from '../components/ui/LayoutCard';
-import { Button } from '../components/ui/Button';
-import { Input } from '../components/ui/Input';
+import { useAuth } from '@/contexts/AuthContext';
+import { LayoutCard } from '@/components/ui/LayoutCard';
+import { Button } from '@/components/ui/Button';
+import { Input } from '@/components/ui/Input';
 
 export const Route = createFileRoute('/registration')({
     component: LoginComponent,

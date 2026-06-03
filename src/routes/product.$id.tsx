@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/Input';
 import { Badge } from '@/components/ui/Badge';
 import { useAuth } from '@/contexts/AuthContext';
 import { useCategories } from '@/hooks/useCategories';
+import { addUpdatedProduct, resolveLocalProductById, ProductNotFoundError } from '@/storage/productStorage';
 
 interface RouterContext {
   queryClient: QueryClient;
@@ -22,6 +23,21 @@ interface RouterContext {
 }
 
 const fetchProductById = async (id: string): Promise<Product> => {
+  const numericId = Number(id);
+
+  try {
+    const local = resolveLocalProductById(numericId);
+
+    if (local) {
+      return local;
+    }
+  } catch (e) {
+    if (e instanceof ProductNotFoundError) {
+      throw new Error('Товар не найден');
+    }
+    throw e;
+  }
+
   const response = await fetch(`https://dummyjson.com/products/${id}`);
 
   if (!response.ok) {
@@ -37,6 +53,9 @@ const fetchProductById = async (id: string): Promise<Product> => {
 
 const updateProductLocally = async (product: Product): Promise<Product> => {
   await new Promise(resolve => setTimeout(resolve, 500));
+
+  addUpdatedProduct(product);
+
   return product;
 };
 
@@ -100,10 +119,15 @@ function ProductDetailComponent() {
   const updateMutation = useMutation({
     mutationFn: updateProductLocally,
     onSuccess: (updatedProduct) => {
-      queryClient.setQueryData(['product', id], updatedProduct);
-      queryClient.setQueryData<Product[]>(['products'], (old = []) =>
-          old.map(p => p.id === updatedProduct.id ? updatedProduct : p)
+      queryClient.invalidateQueries({
+        queryKey: ['products'],
+      });
+
+      queryClient.setQueryData(
+          ['product', id],
+          updatedProduct,
       );
+
       setIsEditing(false);
     },
   });

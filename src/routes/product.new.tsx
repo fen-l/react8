@@ -1,12 +1,13 @@
 import * as React from 'react';
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { type Product } from '@/schemas/product.schema';
+import type { Product } from '@/schemas/product.schema';
 import { LayoutCard } from '@/components/ui/LayoutCard';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { useAuth } from '@/contexts/AuthContext';
 import { useCategories } from '@/hooks/useCategories';
+import { addCreatedProduct } from '@/storage/productStorage';
 
 export const Route = createFileRoute('/product/new')({
   component: CreateProductComponent,
@@ -25,16 +26,20 @@ const createProductAPI = async (product: Omit<Product, 'id'>): Promise<Product> 
       category: product.category,
     }),
   });
+  // DummyJSON возвращает id, title, price, category
+  // Но эти данные не сохраняются реально на сервере
   const data = await response.json();
 
-  // DummyJSON возвращает id, title, price, category
-  // Но эти данные не сохраняются на сервере реально
-  return {
-    id: data.id,
+  const newProduct: Product = {
+    id: Date.now(),
     title: data.title,
     price: data.price,
     category: data.category,
   };
+
+  addCreatedProduct(newProduct);
+
+  return newProduct;
 };
 
 function CreateProductComponent() {
